@@ -4,32 +4,15 @@ from autogen import ModelClient, ConversableAgent
 from config.settings import Settings
 from core.llm_provider import LLMProvider
 
-class DictNamespace:
+class AutoGenResponseObject(dict):
     """
-    A namespace object that supports both attribute access and dictionary-like access
-    (keys, get, indexing, and iteration), making it fully compatible with AutoGen's internal structures.
+    A dictionary subclass that supports attribute access.
+    Passes all Pydantic dict checks while allowing attribute-based retrieval.
     """
     def __init__(self, **kwargs: Any):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-    def __iter__(self):
-        return iter(self.__dict__.items())
-
-    def keys(self):
-        return self.__dict__.keys()
-
-    def __getitem__(self, item):
-        return getattr(self, item)
-
-    def get(self, item, default=None):
-        return getattr(self, item, default)
-
-    def __setitem__(self, key, value):
-        setattr(self, key, value)
-
-    def __repr__(self):
-        return f"DictNamespace({self.__dict__})"
+        super().__init__(**kwargs)
+        # Bind self.__dict__ to self so attribute access works
+        self.__dict__ = self
 
 
 class CampusAIAutoGenClient(ModelClient):
@@ -43,7 +26,7 @@ class CampusAIAutoGenClient(ModelClient):
         if not self.provider:
             raise ValueError("provider_instance must be supplied in config")
 
-    def create(self, params: Dict[str, Any]) -> DictNamespace:
+    def create(self, params: Dict[str, Any]) -> AutoGenResponseObject:
         messages = params.get("messages", [])
         
         # Check if the last message was a tool response
@@ -66,26 +49,26 @@ class CampusAIAutoGenClient(ModelClient):
                 user_question = last_msg.get("content", "")
 
             # Simulate tool call structure for AutoGen execution
-            tool_call = DictNamespace(
+            tool_call = AutoGenResponseObject(
                 id="call_search_1",
                 type="function",
-                function=DictNamespace(
+                function=AutoGenResponseObject(
                     name="search_university_info",
                     arguments=json.dumps({"query": user_question})
                 )
             )
-            choice = DictNamespace(
-                message=DictNamespace(
+            choice = AutoGenResponseObject(
+                message=AutoGenResponseObject(
                     content=None,
                     role="assistant",
                     tool_calls=[tool_call],
                     function_call=None
                 )
             )
-            return DictNamespace(
+            return AutoGenResponseObject(
                 choices=[choice],
                 model="campus-ai-provider",
-                usage=DictNamespace(
+                usage=AutoGenResponseObject(
                     prompt_tokens=0,
                     completion_tokens=0,
                     total_tokens=0
@@ -108,33 +91,33 @@ class CampusAIAutoGenClient(ModelClient):
             system=system_prompt
         )
 
-        choice = DictNamespace(
-            message=DictNamespace(
+        choice = AutoGenResponseObject(
+            message=AutoGenResponseObject(
                 content=response.text,
                 role="assistant",
                 tool_calls=None,
                 function_call=None
             )
         )
-        return DictNamespace(
+        return AutoGenResponseObject(
             choices=[choice],
             model="campus-ai-provider",
-            usage=DictNamespace(
+            usage=AutoGenResponseObject(
                 prompt_tokens=0,
                 completion_tokens=0,
                 total_tokens=response.tokens_used
             )
         )
 
-    def message_retrieval(self, response: DictNamespace) -> List[str]:
+    def message_retrieval(self, response: AutoGenResponseObject) -> List[str]:
         choices = getattr(response, "choices", [])
         return [choice.message.content for choice in choices if getattr(choice.message, "content", None) is not None]
 
-    def cost(self, response: DictNamespace) -> float:
+    def cost(self, response: AutoGenResponseObject) -> float:
         return 0.0
 
     @staticmethod
-    def get_usage(response: DictNamespace) -> Dict[str, int]:
+    def get_usage(response: AutoGenResponseObject) -> Dict[str, int]:
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0.0}
 
 
