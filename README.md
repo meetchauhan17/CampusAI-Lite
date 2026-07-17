@@ -36,14 +36,14 @@ CampusAI-Lite is structured around a decoupled agent-and-server architecture:
                    │ (Thread Lock & Model Normalization)  │
                    └──────────────┬───────────────────────┘
                                   │
-                                  ├─► Watsonx.ai ("bob" CLI) [Primary]
+                                  ├─► ibmbob ("bob" CLI) [Primary]
                                   ├─► Groq Cloud             [Fallback 1]
                                   └─► Google Gemini          [Fallback 2]
 ```
 
 ### 1. Unified `LLMProvider`
 All framework pipelines run their inference calls through a single [LLMProvider](file:///c:/Meet/xyz/campusai-lite/core/llm_provider.py) class. This guarantees identical model characteristics and reliable fallbacks:
-* **Failover Chain**: `bob` (watsonx.ai CLI wrapper) $\rightarrow$ `groq` $\rightarrow$ `gemini`.
+* **Failover Chain**: `bob` (ibmbob CLI wrapper) $\rightarrow$ `groq` $\rightarrow$ `gemini`.
 * **Model Normalization**: Unsupported Granite model tags (e.g. `ibm/granite-3-8b-instruct`) are mapped to `gemini-3.5-flash` to keep the Bob CLI stable.
 * **Concurrency Lock**: A global thread lock prevents Git config locking conflicts (`.git/config: File exists`) when parallel frameworks call the Bob CLI simultaneously.
 
