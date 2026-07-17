@@ -36,7 +36,7 @@ CampusAI-Lite is structured around a decoupled agent-and-server architecture:
                    │ (Thread Lock & Model Normalization)  │
                    └──────────────┬───────────────────────┘
                                   │
-                                  ├─► ibmbob ("bob" CLI) [Primary]
+                                  ├─► ibmbob ("bob" CLI)     [Primary]
                                   ├─► Groq Cloud             [Fallback 1]
                                   └─► Google Gemini          [Fallback 2]
 ```
@@ -91,6 +91,34 @@ campusai-lite/
 
 ---
 
+## Framework Implementation Details
+
+Each agent framework is wired to perform the exact same three logical steps, allowing for a standardized comparison:
+
+### 1. CrewAI
+* **Agents**: Defines three specialized roles:
+  1. `PlannerAgent`: Analyzes the user's question, breaks it down, and classifies the query category.
+  2. `InformationAgent`: Executes the `UniversityInfoSearchTool` using the classified category to retrieve grounded facts.
+  3. `ValidationAgent`: Assesses the generated answer against the source chunks using PydanticAI.
+* **Orchestration**: Runs a sequential `Crew` workflow (`Planner` $\rightarrow$ `Information` $\rightarrow$ `Validation`).
+
+### 2. LangGraph
+* **State Management**: Uses a statechart to manage loops and retries.
+* **Nodes**:
+  * `plan`: Classifies the inquiry.
+  * `retrieve_and_answer`: Conducts semantic searches and drafts a response.
+  * `validate`: Executes PydanticAI validation.
+  * `check_validation` (Conditional Router): Loops back to `retrieve_and_answer` with feedback if validation fails, up to 2 times.
+
+### 3. AutoGen (AG2)
+* **Agents**: Deploys a conversation-based multi-agent system containing a `PlannerAgent`, `InformationAgent`, `ValidationAgent`, and a `user_proxy`.
+* **Routing**: Uses a customized `GroupChat` with a `select_speaker_sequence` speaker selector to enforce structured conversation flows. The custom AutoGen LLM client communicates with `LLMProvider` via a global registry to bypass deepcopy constraints.
+
+### 4. BeeAI (PoC)
+* **Orchestration**: Operates as a light conceptual prototype that sets up a single-agent router to fetch details and validate them directly.
+
+---
+
 ## Setup & Installation
 
 ### Prerequisite
@@ -142,6 +170,7 @@ Start the FastAPI server on port `8000`:
 python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 * Interactive API Documentation will be available at `http://localhost:8000/docs`.
+* Endpoint **`POST /api/compare`** accepts a JSON payload: `{"question": "How much is the B.Tech tuition fee?"}` and executes all pipelines in parallel.
 
 ### 3. Launch the Next.js Web App
 Navigate to the web UI directory, install Node modules, and run the Next.js development server on port `3000`:
@@ -158,6 +187,27 @@ Launch the interactive python-based playground:
 python ui/gradio_app.py
 ```
 * Open your browser to `http://localhost:7860`.
+
+---
+
+## Troubleshooting & Known Issues
+
+### 1. Address Already in Use (Port Conflicts)
+If starting the FastAPI or Gradio servers results in `[Errno 10048] (Address already in use)`, run these PowerShell commands to kill the background processes occupying the ports:
+```powershell
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue).OwningProcess -Force
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 7860 -ErrorAction SilentlyContinue).OwningProcess -Force
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue).OwningProcess -Force
+```
+
+### 2. Git Config Locking Conflicts
+When executing multiple frameworks concurrently, parallel CLI processes may try to modify `.git/config` at the exact same millisecond, leading to this error:
+`could not lock config file .git/config: File exists`
+* **Resolution**: Already solved in `LLMProvider` using a global `_bob_lock` thread-lock which queues the subprocess requests sequentially.
+
+### 3. Windows Emoji Encoding Crashes
+If printing unicode characters or emojis (`✨`, `📋`) raises a `UnicodeEncodeError` in Windows PowerShell/Command Prompt:
+* **Resolution**: Already solved in `logger.py` by reconfiguring `sys.stdout` and `sys.stderr` to use `utf-8` mode on Windows launch.
 
 ---
 
