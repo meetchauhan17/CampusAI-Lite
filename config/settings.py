@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Typed as Any to bypass pydantic-settings complex JSON decoding from environment variables
     FALLBACK_ORDER: Any = ["bob", "groq", "gemini"]
 
+    # CrewAI verbosity — set to False in production/demo to suppress step-by-step logs
+    CREW_VERBOSE: bool = True
+
     @field_validator("FALLBACK_ORDER", mode="before")
     @classmethod
     def parse_fallback_order(cls, v: Any) -> List[str]:

@@ -102,6 +102,32 @@ def search_university_info(query: str) -> Dict[str, Any]:
     return _execute_university_search(query)
 
 
+# ── CrewAI-native Tool wrapper (crewai.tools.BaseTool) ──────────────────────
+try:
+    from crewai.tools import BaseTool as CrewAIBaseTool
+
+    class UniversityInfoSearchToolCrewAI(CrewAIBaseTool):
+        """
+        CrewAI-native wrapper for the university document search tool.
+        Inherits from crewai.tools.BaseTool (not LangChain's) so it can be
+        passed directly to crewai.Agent(tools=[...]).
+        Delegates to the same shared _execute_university_search logic.
+        """
+        name: str = "UniversityInfoSearchTool"
+        description: str = (
+            "Search university documents (exams, fees, library, hostel, academic calendar) "
+            "to answer student queries. Input should be a specific search query string."
+        )
+
+        def _run(self, query: str) -> str:
+            res = _execute_university_search(query)
+            return json.dumps(res, default=str)
+
+except ImportError:
+    # If crewai is not installed in the environment, skip silently
+    UniversityInfoSearchToolCrewAI = None  # type: ignore
+
+
 if __name__ == "__main__":
     # Self-verification block
     print("--- UniversityInfoSearchTool Verification ---")
