@@ -1,9 +1,36 @@
 import json
-from types import SimpleNamespace
 from typing import Any, List, Dict, Optional
 from autogen import ModelClient, ConversableAgent
 from config.settings import Settings
 from core.llm_provider import LLMProvider
+
+class DictNamespace:
+    """
+    A namespace object that supports both attribute access and dictionary-like access
+    (keys, get, indexing, and iteration), making it fully compatible with AutoGen's internal structures.
+    """
+    def __init__(self, **kwargs: Any):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+    def __iter__(self):
+        return iter(self.__dict__.items())
+
+    def keys(self):
+        return self.__dict__.keys()
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def get(self, item, default=None):
+        return getattr(self, item, default)
+
+    def __setitem__(self, key, value):
+        setattr(self, key, value)
+
+    def __repr__(self):
+        return f"DictNamespace({self.__dict__})"
+
 
 class CampusAIAutoGenClient(ModelClient):
     """
@@ -16,7 +43,7 @@ class CampusAIAutoGenClient(ModelClient):
         if not self.provider:
             raise ValueError("provider_instance must be supplied in config")
 
-    def create(self, params: Dict[str, Any]) -> SimpleNamespace:
+    def create(self, params: Dict[str, Any]) -> DictNamespace:
         messages = params.get("messages", [])
         
         # Check if the last message was a tool response
@@ -39,26 +66,26 @@ class CampusAIAutoGenClient(ModelClient):
                 user_question = last_msg.get("content", "")
 
             # Simulate tool call structure for AutoGen execution
-            tool_call = SimpleNamespace(
+            tool_call = DictNamespace(
                 id="call_search_1",
                 type="function",
-                function=SimpleNamespace(
+                function=DictNamespace(
                     name="search_university_info",
                     arguments=json.dumps({"query": user_question})
                 )
             )
-            choice = SimpleNamespace(
-                message=SimpleNamespace(
+            choice = DictNamespace(
+                message=DictNamespace(
                     content=None,
                     role="assistant",
                     tool_calls=[tool_call],
                     function_call=None
                 )
             )
-            return SimpleNamespace(
+            return DictNamespace(
                 choices=[choice],
                 model="campus-ai-provider",
-                usage=SimpleNamespace(
+                usage=DictNamespace(
                     prompt_tokens=0,
                     completion_tokens=0,
                     total_tokens=0
@@ -81,33 +108,33 @@ class CampusAIAutoGenClient(ModelClient):
             system=system_prompt
         )
 
-        choice = SimpleNamespace(
-            message=SimpleNamespace(
+        choice = DictNamespace(
+            message=DictNamespace(
                 content=response.text,
                 role="assistant",
                 tool_calls=None,
                 function_call=None
             )
         )
-        return SimpleNamespace(
+        return DictNamespace(
             choices=[choice],
             model="campus-ai-provider",
-            usage=SimpleNamespace(
+            usage=DictNamespace(
                 prompt_tokens=0,
                 completion_tokens=0,
                 total_tokens=response.tokens_used
             )
         )
 
-    def message_retrieval(self, response: SimpleNamespace) -> List[str]:
+    def message_retrieval(self, response: DictNamespace) -> List[str]:
         choices = getattr(response, "choices", [])
         return [choice.message.content for choice in choices if getattr(choice.message, "content", None) is not None]
 
-    def cost(self, response: SimpleNamespace) -> float:
+    def cost(self, response: DictNamespace) -> float:
         return 0.0
 
     @staticmethod
-    def get_usage(response: SimpleNamespace) -> Dict[str, int]:
+    def get_usage(response: DictNamespace) -> Dict[str, int]:
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0.0}
 
 
