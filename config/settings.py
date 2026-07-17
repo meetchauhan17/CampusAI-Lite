@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # CrewAI verbosity — set to False in production/demo to suppress step-by-step logs
     CREW_VERBOSE: bool = True
 
+    # Gradio UI settings
+    GRADIO_SHARE: bool = False       # Set True in .env to get a public share link
+    GRADIO_PORT: int = 7860
+
     @field_validator("FALLBACK_ORDER", mode="before")
     @classmethod
     def parse_fallback_order(cls, v: Any) -> List[str]:
