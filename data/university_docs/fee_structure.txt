@@ -1,0 +1,30 @@
+SAMPLE DATA — replace with real university documents.
+
+GTU / CampusAI University Academic Fee Structure
+Academic Year: 2026-2027
+
+The fee structure details the annual and semester-wise fees payable by undergraduate (B.E./B.Tech) and postgraduate (M.E./M.Tech/MBA) students.
+
+1. B.E. / B.Tech (Undergraduate) Tuition Fees:
+   - Tuition Fee (per semester): INR 45,000
+   - Enrollment Fee (one-time, at admission): INR 1,500
+   - Examination Fee (per semester): INR 1,200
+   - Laboratory & Library Fee (per annum): INR 5,000
+   - Student Activity & Sports Fee (per annum): INR 2,000
+   - Total Estimated First Semester Fee: INR 54,700
+
+2. M.E. / M.Tech / MBA (Postgraduate) Tuition Fees:
+   - Tuition Fee (per semester): INR 60,000
+   - Enrollment Fee (one-time, at admission): INR 2,500
+   - Examination Fee (per semester): INR 1,800
+   - Laboratory & Library Fee (per annum): INR 8,000
+   - Student Activity & Sports Fee (per annum): INR 3,000
+
+3. Late Fee and Penalty Rules:
+   - All semester fees must be paid within 10 working days of the semester commencement.
+   - Late fee of INR 100 per day is applicable for payments received from Day 11 to Day 20.
+   - If fees are not paid within 30 days, registration will be temporarily suspended, and a readmission fee of INR 5,000 will be charged.
+
+Payment Portals and Methods:
+- Online payments are accepted via Net Banking, UPI, and Credit/Debit cards on the student portal (https://fees.campusai.edu.in).
+- Cash or demand drafts should be submitted directly at the Accounts Window, Administration Block.

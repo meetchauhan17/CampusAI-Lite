@@ -1,0 +1,38 @@
+SAMPLE DATA — replace with real university documents.
+
+GTU / CampusAI University Exam Timetable
+Academic Year: 2026-2027
+Semester: Winter 2026 / Semester 1, 3, 5, 7
+
+This schedule covers the final theory examinations for all undergraduate engineering branches.
+
+1. Semester 7 Exams:
+   - Subject: Artificial Intelligence (AI-701)
+     Date: November 24, 2026 (Tuesday)
+     Time: 10:30 AM to 01:00 PM
+     Venues: Block A, Hall 1-3
+   - Subject: Cloud Computing (CC-702)
+     Date: November 27, 2026 (Friday)
+     Time: 10:30 AM to 01:00 PM
+     Venues: Block A, Hall 4-6
+
+2. Semester 5 Exams:
+   - Subject: Database Management Systems (DBMS-501)
+     Date: November 25, 2026 (Wednesday)
+     Time: 02:00 PM to 04:30 PM
+     Venues: Block B, Hall 7-10
+   - Subject: Design & Analysis of Algorithms (DAA-502)
+     Date: November 28, 2026 (Saturday)
+     Time: 02:00 PM to 04:30 PM
+     Venues: Block B, Hall 11-14
+
+3. Semester 3 Exams:
+   - Subject: Data Structures (DS-301)
+     Date: December 01, 2026 (Tuesday)
+     Time: 10:30 AM to 01:00 PM
+     Venues: Block C, Hall 15-20
+
+Important Guidelines for Students:
+- Students must present their physical Hall Ticket and Student ID card to enter the examination hall.
+- Entry is permitted up to 15 minutes after the exam starts. No student may leave within the first 45 minutes.
+- Mobile phones, smartwatches, and programmable calculators are strictly prohibited in the exam hall.
