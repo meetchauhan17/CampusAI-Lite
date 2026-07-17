@@ -58,7 +58,7 @@ The `/api/compare` endpoint executes all 4 framework pipelines concurrently usin
 ---
 
 <details>
-<summary>📂 <b>View Folder Structure</b></summary>
+<summary><b>View Folder Structure</b></summary>
 
 ```
 campusai-lite/
@@ -95,7 +95,7 @@ campusai-lite/
 ---
 
 <details>
-<summary>🤖 <b>View Framework Implementation Details</b></summary>
+<summary><b>View Framework Implementation Details</b></summary>
 
 ### 1. CrewAI
 * **Agents**: Defines three specialized roles:
@@ -195,7 +195,7 @@ python ui/gradio_app.py
 ---
 
 <details>
-<summary>🔧 <b>View Troubleshooting & Known Issues Guide</b></summary>
+<summary><b>View Troubleshooting & Known Issues Guide</b></summary>
 
 ### 1. Address Already in Use (Port Conflicts)
 If starting the FastAPI or Gradio servers results in `[Errno 10048] (Address already in use)`, run these PowerShell commands to kill the background processes occupying the ports:
