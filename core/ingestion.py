@@ -1,5 +1,6 @@
 import os
 import glob
+import threading
 from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.utils import embedding_functions
@@ -21,6 +22,10 @@ CATEGORY_MAPPING = {
     "calendar": "academic-calendar"
 }
 
+_client = None
+_collection = None
+_chroma_lock = threading.Lock()
+
 def get_category_from_filename(filename: str) -> str:
     """Determine the category of a document based on its filename."""
     lower_filename = filename.lower()
@@ -31,19 +36,28 @@ def get_category_from_filename(filename: str) -> str:
 
 def get_chroma_collection():
     """Initialize ChromaDB client and retrieve or create the collection."""
-    os.makedirs(DB_DIR, exist_ok=True)
-    client = chromadb.PersistentClient(path=DB_DIR)
-    
-    # Initialize sentence-transformers embedding function (runs locally)
-    emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
-    )
-    
-    collection = client.get_or_create_collection(
-        name="university_docs",
-        embedding_function=emb_fn
-    )
-    return collection
+    global _client, _collection
+    if _collection is not None:
+        return _collection
+
+    with _chroma_lock:
+        if _collection is not None:
+            return _collection
+
+        os.makedirs(DB_DIR, exist_ok=True)
+        if _client is None:
+            _client = chromadb.PersistentClient(path=DB_DIR)
+        
+        # Initialize sentence-transformers embedding function (runs locally)
+        emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2"
+        )
+        
+        _collection = _client.get_or_create_collection(
+            name="university_docs",
+            embedding_function=emb_fn
+        )
+        return _collection
 
 def ingest_all_documents(refresh: bool = False) -> None:
     """

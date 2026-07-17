@@ -100,16 +100,21 @@ def extract_prompt_and_system(request: Any) -> tuple[str, Optional[str]]:
     return user_prompt.strip(), system_prompt
 
 
+import threading
+
+_bob_lock = threading.Lock()
+
+
 class LLMProvider:
     """
     Unified LLM Client that manages authentication, lazy loading of SDKs,
-    and automatic failover (fallback) between 'bob' (watsonx.ai), 'groq', and 'gemini'.
+    and automatic failover (fallback) between 'bob' (IBM Bob Shell CLI),
+    'groq', and 'gemini'.
     """
     def __init__(self, settings: Settings):
         self.settings = settings
-        
+
         # Lazy client placeholders
-        self._bob_client = None
         self._groq_client = None
         self._groq_async_client = None
         self._gemini_configured = False
@@ -126,28 +131,59 @@ class LLMProvider:
             "gemini": self._call_gemini_async
         }
 
-    # Lazy initialization helpers
-    def _get_bob_model(self) -> Any:
-        if self._bob_client is None:
-            if not self.settings.BOBSHELL_API_KEY or not self.settings.BOB_PROJECT_ID:
-                raise ValueError("Missing BOBSHELL_API_KEY or BOB_PROJECT_ID for watsonx ('bob') provider.")
-            
-            from ibm_watsonx_ai import APIClient, Credentials
-            
-            credentials = Credentials(
-                url=self.settings.BOB_URL or "https://us-south.ml.cloud.ibm.com",
-                api_key=self.settings.BOBSHELL_API_KEY
+    def __deepcopy__(self, memo: dict):
+        # AG2/AutoGen deep-copies llm_config when constructing ConversableAgent.
+        # Our provider holds live httpx clients (CookieJar, RLock) that can't be
+        # pickled.  Returning self is safe: the provider is stateless per-call.
+        memo[id(self)] = self
+        return self
+
+    # Bob Shell subprocess helper
+    def _run_bob_subprocess(self, prompt: str) -> str:
+        """
+        Calls the Bob Shell CLI (bob.cmd) via subprocess, pipes prompt through
+        stdin, and extracts the response from ---output--- markers.
+        """
+        import subprocess, os
+        if not self.settings.BOBSHELL_API_KEY:
+            raise ValueError("Missing BOBSHELL_API_KEY for IBM Bob Shell provider.")
+
+        env = {**os.environ, "BOBSHELL_API_KEY": self.settings.BOBSHELL_API_KEY}
+        raw_model = self.settings.BOB_MODEL or "premium"
+        
+        # Model normalization mapping (as specified by Bob architecture)
+        model_lower = raw_model.lower()
+        if "granite" in model_lower:
+            model = "gemini-3.5-flash"
+        else:
+            supported_models = [
+                "premium", "premium-ide", "sonnet-4.5", "haiku-4.5",
+                "explorer", "gpt-2026-5.4", "gemini-3.5-flash", "granite-8b-code-instruct"
+            ]
+            model = raw_model if raw_model in supported_models else "premium"
+
+        # Synchronize subprocess calls to prevent git lock file conflicts in parallel threads
+        with _bob_lock:
+            result = subprocess.run(
+                f'bob.cmd --output-format text --model "{model}"',
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                shell=True,
+                env=env,
             )
-            client = APIClient(credentials)
-            client.set.default_project(self.settings.BOB_PROJECT_ID)
-            self._bob_client = client
+        if result.returncode != 0:
+            raise RuntimeError(f"Bob Shell exited {result.returncode}: {result.stderr.strip()}")
 
-        from ibm_watsonx_ai.foundation_models import ModelInference
-        return ModelInference(
-            model_id=self.settings.BOB_MODEL or "ibm/granite-3-8b-instruct",
-            api_client=self._bob_client
-        )
+        # Extract content between ---output--- markers (odd-indexed segments)
+        parts = result.stdout.split("---output---")
+        if len(parts) >= 3:
+            return "\n".join(p.strip() for p in parts[1::2] if p.strip())
+        # Fallback: return all stdout if markers absent
+        return result.stdout.strip()
 
+    # Lazy initialization helpers
     def _get_groq_client(self) -> Any:
         if self._groq_client is None:
             if not self.settings.GROQ_API_KEY:
@@ -174,49 +210,22 @@ class LLMProvider:
 
     # Internal call methods
     def _call_bob(self, prompt: str, system: Optional[str], temperature: float, max_tokens: int) -> tuple[str, Optional[int]]:
-        logger.info("[bob] Executing watsonx generate call.")
-        model = self._get_bob_model()
-        params = {
-            "decoding_method": "greedy" if temperature == 0 else "sample",
-            "temperature": temperature,
-            "max_new_tokens": max_tokens
-        }
-        
-        # Apply Granite chat prompt formatting if system prompt is present
+        logger.info("[bob] Executing IBM Bob Shell generate call.")
         full_prompt = prompt
         if system:
-            full_prompt = f"<|system|>\n{system}\n<|user|>\n{prompt}\n<|assistant|>\n"
-            
-        res = model.generate(prompt=full_prompt, params=params)
-        result = res["results"][0]
-        text = result["generated_text"]
-        
-        input_tokens = result.get("input_token_count", 0)
-        output_tokens = result.get("generated_token_count", 0)
-        tokens_used = input_tokens + output_tokens if (input_tokens or output_tokens) else None
-        return text, tokens_used
+            full_prompt = f"SYSTEM: {system}\nUSER: {prompt}"
+        text = self._run_bob_subprocess(full_prompt)
+        return text, None  # Bob Shell does not report token counts
 
     async def _call_bob_async(self, prompt: str, system: Optional[str], temperature: float, max_tokens: int) -> tuple[str, Optional[int]]:
-        logger.info("[bob] Executing async watsonx generate call.")
-        model = self._get_bob_model()
-        params = {
-            "decoding_method": "greedy" if temperature == 0 else "sample",
-            "temperature": temperature,
-            "max_new_tokens": max_tokens
-        }
-        
+        logger.info("[bob] Executing async IBM Bob Shell generate call (thread pool).")
+        import asyncio
+        loop = asyncio.get_event_loop()
         full_prompt = prompt
         if system:
-            full_prompt = f"<|system|>\n{system}\n<|user|>\n{prompt}\n<|assistant|>\n"
-            
-        res = await model.agenerate(prompt=full_prompt, params=params)
-        result = res["results"][0]
-        text = result["generated_text"]
-        
-        input_tokens = result.get("input_token_count", 0)
-        output_tokens = result.get("generated_token_count", 0)
-        tokens_used = input_tokens + output_tokens if (input_tokens or output_tokens) else None
-        return text, tokens_used
+            full_prompt = f"SYSTEM: {system}\nUSER: {prompt}"
+        text = await loop.run_in_executor(None, self._run_bob_subprocess, full_prompt)
+        return text, None
 
     def _call_groq(self, prompt: str, system: Optional[str], temperature: float, max_tokens: int) -> tuple[str, Optional[int]]:
         logger.info("[groq] Executing groq generate call.")

@@ -15,18 +15,21 @@ from crewai import Task
 def build_tasks(
     agents: dict,
     user_question: str,
+    retrieved_chunks: Optional[list[dict]] = None,
 ) -> tuple[Task, Task, Task]:
     """
     Builds the three Tasks for a given user question.
 
     Args:
         agents:        Dict returned by build_agents() with keys
-                       'planner', 'information', 'validator'.
+        'planner', 'information', 'validator'.
         user_question: The raw student query to process.
+        retrieved_chunks: Optional list of pre-fetched document chunks.
 
     Returns:
         A tuple (plan_task, retrieve_task, validate_task) ready for Crew.
     """
+    import json
 
     # ── Task 1: Plan ─────────────────────────────────────────────────────────
     plan_task = Task(
@@ -37,7 +40,7 @@ def build_tasks(
             "1. Detect the query category from: exams, fees, library, hostel, "
             "academic-calendar, or general.\n"
             "2. Break the question into 1-3 focused retrieval sub-tasks.\n"
-            "3. Decide whether the UniversityInfoSearchTool is needed (requires_tool).\n\n"
+            "3. Decide whether the university_info_search_tool is needed (requires_tool).\n\n"
             "Return ONLY a valid JSON object — no markdown, no explanation:\n"
             '{"sub_tasks": [...], "category": "...", "requires_tool": true/false}'
         ),
@@ -52,25 +55,27 @@ def build_tasks(
     )
 
     # ── Task 2: Retrieve ─────────────────────────────────────────────────────
+    chunks_str = ""
+    if retrieved_chunks:
+        chunks_str = f"Here are the official document chunks retrieved from the university files for this question:\n{json.dumps(retrieved_chunks, indent=2)}\n\n"
+
     retrieve_task = Task(
         description=(
             f"The student asked: '{user_question}'\n\n"
             "You have been given the planner's execution plan (in the context above).\n\n"
-            "Instructions:\n"
-            "1. Call the UniversityInfoSearchTool with the original question "
-            "to retrieve relevant document chunks.\n"
-            "2. Based on the retrieved chunks and the planner's sub-tasks, "
-            "compose a clear, factual answer.\n"
+            f"{chunks_str}"
+            "CRITICAL INSTRUCTIONS:\n"
+            "1. You MUST call the university_info_search_tool with the student's question "
+            "to retrieve relevant document chunks. (If retrieved chunks are already provided above, "
+            "use them directly to answer the question, but still cite the source files correctly). "
+            "DO NOT answer without using the retrieved facts. Do not rely on pre-trained knowledge or guess the answer.\n"
+            "2. Based ONLY on the retrieved chunks from the tool output or provided above, compose a clear, factual answer.\n"
             "3. List every source filename you used.\n\n"
-            "Return ONLY a valid JSON object:\n"
-            '{"raw_answer": "...", "sources": ["..."], "category": "..."}'
+            "Provide your drafted answer and sources as a clear text response."
         ),
         expected_output=(
-            'A JSON object with exactly three keys: '
-            '"raw_answer" (string — the drafted answer), '
-            '"sources" (list of source file names cited), '
-            '"category" (string matching the planner\'s category). '
-            "No markdown. No text outside the JSON."
+            "A clear, factual drafted answer based ONLY on the retrieved document chunks, "
+            "including a list of source filenames used to answer."
         ),
         agent=agents["information"],
         context=[plan_task],
@@ -80,14 +85,22 @@ def build_tasks(
     validate_task = Task(
         description=(
             f"Original question: '{user_question}'\n\n"
-            "You have the information agent's drafted answer and sources (in context above).\n\n"
-            "Instructions:\n"
-            "1. Compare every fact in raw_answer against the source chunks.\n"
-            "2. Set is_grounded=true only if all claims appear in the sources.\n"
-            "3. Set is_accurate=true only if there are no factual errors.\n"
-            "4. Correct small inaccuracies in final_answer when possible.\n"
-            "5. List specific issues found (empty list if none).\n"
-            "6. Assign a confidence score between 0.0 and 1.0.\n\n"
+            f"{chunks_str}"
+            "You have the information agent's drafted answer in the context above.\n\n"
+            "STRICT VALIDATION INSTRUCTIONS:\n"
+            "1. Identify every concrete factual claim in the drafted answer: "
+            "dates, times, hall/block numbers, fees, amounts, deadlines, book limits.\n"
+            "2. For EACH claim, compare it to the retrieved chunks above:\n"
+            "   - Verify if the claim is fully supported by the retrieved chunks. A claim is supported if the chunks contain the exact same fact (e.g., date, fee amount, book limit, hall number). The wording doesn't have to be identical, but the factual information (names, dates, times, numbers) must match verbatim.\n"
+            "   - If a claim is unverified (not mentioned in the chunks) or contradicts the chunks, list it as an issue in the 'issues' array. Format the issue clearly, e.g., 'Claim \"<claim>\" not found in any retrieved chunk — possible hallucination.' or 'Claim \"<claim>\" contradicts retrieved chunk: \"<chunk quote>\"'.\n"
+            "3. Set is_grounded=true if all factual claims in the drafted answer are supported by the chunks.\n"
+            "4. Set is_accurate=true if and only if is_grounded=true AND there are no contradictions, unverified claims, or discrepancies. If there are any discrepancies, set is_accurate=false.\n"
+            "5. If the drafted answer has no issues and is completely accurate, set is_accurate=true, is_grounded=true, and issues=[].\n"
+            "6. Set confidence based on verification:\n"
+            "   - All claims verified and accurate: 0.90 to 1.00\n"
+            "   - Most claims verified and accurate (>=75%): 0.60 to 0.89\n"
+            "   - Major contradictions or unverified claims: 0.00 to 0.59\n"
+            "7. In final_answer: if the drafted answer is accurate, return it as-is. If there are errors or unverified claims, correct them using ONLY the facts from the chunks.\n\n"
             "Return ONLY a valid JSON object:\n"
             '{"is_grounded": true/false, "is_accurate": true/false, '
             '"final_answer": "...", "confidence": 0.0, "issues": [...]}'
@@ -96,9 +109,9 @@ def build_tasks(
             'A JSON object with exactly five keys: '
             '"is_grounded" (bool), '
             '"is_accurate" (bool), '
-            '"final_answer" (string — corrected answer ready for the user), '
-            '"confidence" (float 0.0–1.0), '
-            '"issues" (list of strings describing any problems found, or empty list). '
+            '"final_answer" (string — corrected answer using only chunk-verified facts), '
+            '"confidence" (float 0.0–1.0, reflects fraction of claims verifiable in chunks), '
+            '"issues" (list of strings: each unverified claim or source citation, or empty list). '
             "No markdown. No text outside the JSON."
         ),
         agent=agents["validator"],

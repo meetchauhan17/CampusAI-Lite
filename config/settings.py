@@ -18,15 +18,14 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-    # watsonx.ai (referred internally as "bob")
+    # IBM Bob Shell (subprocess CLI)
     BOBSHELL_API_KEY: Optional[str] = None
-    BOB_MODEL: str = "ibm/granite-3-8b-instruct"
-    BOB_PROJECT_ID: Optional[str] = None
-    BOB_URL: Optional[str] = None
+    BOB_MODEL: str = "premium"
 
     # Other API keys
     GROQ_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # Fallback configuration
     PRIMARY_PROVIDER: str = "bob"
@@ -58,8 +57,6 @@ class Settings(BaseSettings):
         missing = []
         if not self.BOBSHELL_API_KEY:
             missing.append("BOBSHELL_API_KEY")
-        if not self.BOB_PROJECT_ID:
-            missing.append("BOB_PROJECT_ID")
         if not self.GROQ_API_KEY:
             missing.append("GROQ_API_KEY")
         if not self.GEMINI_API_KEY:

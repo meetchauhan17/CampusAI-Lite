@@ -83,6 +83,7 @@ class LangGraphPipeline:
             "}"
         )
 
+        error_msg = None
         try:
             response = await self.provider.generate_async(
                 prompt=state["user_question"],
@@ -94,8 +95,11 @@ class LangGraphPipeline:
                 category=data.get("category", "general"),
                 requires_tool=bool(data.get("requires_tool", False))
             )
+            logger.debug("[LangGraph][plan] category={} requires_tool={}",
+                         planner_output.category, planner_output.requires_tool)
         except Exception as e:
-            logger.warning("[LangGraph] Failed to parse planner output: {}. Using default fallback.", e)
+            logger.exception("[LangGraph][plan] Failed to parse planner output; using fallback.")
+            error_msg = f"plan node: {type(e).__name__}: {e}"
             planner_output = PlannerOutput(
                 sub_tasks=[f"Retrieve info for: {state['user_question']}"],
                 category="general",
@@ -103,11 +107,12 @@ class LangGraphPipeline:
             )
 
         elapsed = (time.perf_counter() - start_time) * 1000.0
-        logger.info("[LangGraph] Node 'plan' executed in {:.2f}ms", elapsed)
+        logger.info("[LangGraph] Node 'plan' completed in {:.2f}ms", elapsed)
 
-        return {
-            "planner_output": planner_output
-        }
+        result = {"planner_output": planner_output}
+        if error_msg:
+            result["error"] = error_msg
+        return result
 
     async def retrieve_and_answer_node(self, state: GraphState) -> dict:
         """
@@ -120,11 +125,16 @@ class LangGraphPipeline:
         planner_output = state.get("planner_output")
         chunks = state.get("retrieved_chunks", [])
 
-        # Call tool if needed and not already fetched
-        if planner_output and planner_output.requires_tool and not chunks:
-            logger.info("[LangGraph] Calling UniversityInfoSearchTool from retrieve_and_answer_node.")
+        # Always search the knowledge base when we have no cached chunks.
+        # Do NOT gate on requires_tool — the planner LLM sometimes returns False
+        # for factual questions, which causes the retriever to skip ChromaDB and
+        # produce hallucinated "no data" answers.
+        if not chunks:
+            logger.info("[LangGraph] Calling UniversityInfoSearchTool (chunks empty — always search).")
             search_res = _execute_university_search(state["user_question"])
             chunks = search_res.get("answer_chunks", [])
+            logger.info("[LangGraph] Search returned {} chunks for category: {}",
+                        len(chunks), search_res.get("category_detected", "unknown"))
 
         system_prompt = (
             "You are a university information retriever assistant.\n"
@@ -150,32 +160,38 @@ class LangGraphPipeline:
                 f"Please update the raw_answer to correct these inaccuracies."
             )
 
+        raw_response_text = ""
+        error_msg = None
         try:
             response = await self.provider.generate_async(
                 prompt=user_prompt,
                 system=system_prompt
             )
-            data = _extract_json(response.text)
+            raw_response_text = response.text
+            data = _extract_json(raw_response_text)
             info_output = InformationAgentOutput(
                 raw_answer=data.get("raw_answer", ""),
                 sources=data.get("sources", []),
                 category=data.get("category", planner_output.category if planner_output else "general")
             )
+            logger.debug("[LangGraph][retrieve_and_answer] raw_answer snippet: {}",
+                         info_output.raw_answer[:120])
         except Exception as e:
-            logger.warning("[LangGraph] Failed to parse retriever answer: {}. Fallback to text.", e)
+            logger.exception("[LangGraph][retrieve_and_answer] Failed to parse LLM answer; using raw text fallback.")
+            error_msg = f"retrieve_and_answer node: {type(e).__name__}: {e}"
             info_output = InformationAgentOutput(
-                raw_answer=response.text,
+                raw_answer=raw_response_text or f"[Error: {e}]",
                 sources=[],
                 category=planner_output.category if planner_output else "general"
             )
 
         elapsed = (time.perf_counter() - start_time) * 1000.0
-        logger.info("[LangGraph] Node 'retrieve_and_answer' executed in {:.2f}ms", elapsed)
+        logger.info("[LangGraph] Node 'retrieve_and_answer' completed in {:.2f}ms", elapsed)
 
-        return {
-            "retrieved_chunks": chunks,
-            "information_output": info_output
-        }
+        result = {"retrieved_chunks": chunks, "information_output": info_output}
+        if error_msg:
+            result["error"] = error_msg
+        return result
 
     async def validate_node(self, state: GraphState) -> dict:
         """
@@ -187,12 +203,26 @@ class LangGraphPipeline:
         info_output = state.get("information_output")
         chunks = state.get("retrieved_chunks", [])
 
-        # Call PydanticAI ValidationAgent
-        validation_result = await self.validation_agent.validate_async(
-            user_question=state["user_question"],
-            info_output=info_output,
-            source_chunks=chunks
-        )
+        error_msg = None
+        try:
+            # Call PydanticAI ValidationAgent
+            validation_result = await self.validation_agent.validate_async(
+                user_question=state["user_question"],
+                info_output=info_output,
+                source_chunks=chunks
+            )
+            logger.debug("[LangGraph][validate] is_accurate={} confidence={}",
+                         validation_result.is_accurate, validation_result.confidence)
+        except Exception as e:
+            logger.exception("[LangGraph][validate] ValidationAgent raised an exception.")
+            error_msg = f"validate node: {type(e).__name__}: {e}"
+            validation_result = ValidationResult(
+                is_grounded=False,
+                is_accurate=False,
+                final_answer=info_output.raw_answer if info_output else "[No answer produced]",
+                confidence=0.0,
+                issues=[error_msg]
+            )
 
         new_retry_count = state.get("retry_count", 0)
         feedback = None
@@ -202,13 +232,16 @@ class LangGraphPipeline:
             feedback = f"Issues in answer: {', '.join(validation_result.issues)}"
 
         elapsed = (time.perf_counter() - start_time) * 1000.0
-        logger.info("[LangGraph] Node 'validate' executed in {:.2f}ms", elapsed)
+        logger.info("[LangGraph] Node 'validate' completed in {:.2f}ms", elapsed)
 
-        return {
+        result = {
             "validation_result": validation_result,
             "retry_count": new_retry_count,
             "feedback": feedback
         }
+        if error_msg:
+            result["error"] = error_msg
+        return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -293,23 +326,21 @@ def run_langgraph_pipeline(
     }
 
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    try:
-        final_state = loop.run_until_complete(app.ainvoke(initial_state))
+        # Use asyncio.run for robust, thread-safe event loop execution
+        final_state = asyncio.run(app.ainvoke(initial_state))
         val_res = final_state.get("validation_result")
+        state_error = final_state.get("error")
+        if state_error:
+            logger.warning("[LangGraph] Pipeline completed with node-level error: {}", state_error)
         if val_res:
             return val_res
         raise ValueError("LangGraph completed execution but did not produce a validation_result.")
     except Exception as e:
-        logger.error("[LangGraph] Pipeline execution failed: {}", e)
+        logger.exception("[LangGraph] Pipeline execution failed.")
         return ValidationResult(
             is_grounded=False,
             is_accurate=False,
-            final_answer="Sorry, the system encountered an error. Please try again.",
+            final_answer="Sorry, the LangGraph pipeline encountered an error. Please try again.",
             confidence=0.0,
             issues=[f"LangGraph pipeline error: {type(e).__name__}: {str(e)}"]
         )

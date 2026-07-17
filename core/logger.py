@@ -1,5 +1,14 @@
 import os
 import sys
+
+# Reconfigure stdout/stderr to UTF-8 on Windows to prevent UnicodeEncodeError in console output
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
+
 from loguru import logger
 
 # Get absolute path to the project root directory

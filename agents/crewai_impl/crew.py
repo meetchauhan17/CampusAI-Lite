@@ -110,10 +110,16 @@ def run_crewai_pipeline(
 
     try:
         # Build agents & tasks
+        # Pre-fetch document chunks to inject into the retrieve task prompt
+        from tools.university_search_tool import _execute_university_search
+        search_res = _execute_university_search(user_question)
+        retrieved_chunks = search_res.get("answer_chunks", [])
+
         agents = build_agents(provider=provider, verbose=verbose)
         plan_task, retrieve_task, validate_task = build_tasks(
             agents=agents,
             user_question=user_question,
+            retrieved_chunks=retrieved_chunks,
         )
 
         # Assemble and run the Crew

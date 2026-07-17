@@ -8,7 +8,7 @@ from core.llm_provider import LLMProvider
 from core.schemas import ValidationResult, InformationAgentOutput
 from tools.university_search_tool import search_university_info
 from agents.pydanticai_validation import ValidationAgent
-from agents.autogen_impl.agents import build_autogen_agents, CampusAIAutoGenClient
+from agents.autogen_impl.agents import build_autogen_agents, CampusAIAutoGenClient, register_provider, _DEFAULT_PROVIDER_KEY
 
 # ─────────────────────────────────────────────────────────────────────────────
 # JSON Extraction Helper
@@ -145,7 +145,7 @@ def select_speaker_sequence(last_speaker: ConversableAgent, groupchat: GroupChat
         if groupchat.messages:
             last_msg = groupchat.messages[-1]
             # Check if tool calling was suggested
-            if "tool_calls" in last_msg or last_msg.get("function_call"):
+            if last_msg.get("tool_calls") or last_msg.get("function_call"):
                 return groupchat.agent_by_name("user_proxy")
         return groupchat.agent_by_name("ValidationAgent")
 
@@ -175,10 +175,6 @@ def run_autogen_pipeline(
 
     logger.info("[AutoGen] Starting pipeline for question: '{}'", user_question[:80])
 
-    # Globally register custom client class to avoid "not activated" errors
-    from autogen import OpenAIWrapper
-    OpenAIWrapper.register_model_client(CampusAIAutoGenClient)
-
     try:
         # Build agents
         agents = build_autogen_agents(provider, settings)
@@ -195,6 +191,11 @@ def run_autogen_pipeline(
             name="search_university_info",
             description="Search university documents (exams, fees, library, hostel, academic calendar) to answer student queries."
         )
+
+        # Re-register client on all LLM agents to ensure it is active right before execution
+        planner.register_model_client(model_client_cls=CampusAIAutoGenClient)
+        information.register_model_client(model_client_cls=CampusAIAutoGenClient)
+        validator.register_model_client(model_client_cls=CampusAIAutoGenClient)
 
         # Register custom validation reply
         validation_agent = ValidationAgent(provider)
@@ -220,10 +221,12 @@ def run_autogen_pipeline(
                     {
                         "model": "campus-ai-provider",
                         "model_client_cls": "CampusAIAutoGenClient",
-                        "provider_instance": provider
+                        "provider_key": _DEFAULT_PROVIDER_KEY,
+                        "temperature": 0.3,
+                        "max_tokens": 1024,
                     }
                 ]
-            }
+            },
         )
         manager.register_model_client(model_client_cls=CampusAIAutoGenClient)
 
@@ -262,13 +265,14 @@ def run_autogen_pipeline(
             return ValidationResult(**data)
 
     except Exception as exc:
-        logger.error("[AutoGen] Pipeline failed: {}", exc)
+        import traceback
+        logger.exception("[AutoGen] Pipeline failed with traceback:")
         return ValidationResult(
             is_grounded=False,
             is_accurate=False,
-            final_answer="Sorry, the system encountered an error. Please try again.",
+            final_answer=f"AutoGen pipeline error: {type(exc).__name__}: {str(exc)}",
             confidence=0.0,
-            issues=[f"AutoGen pipeline exception: {type(exc).__name__}: {str(exc)[:300]}"]
+            issues=[f"{type(exc).__name__}: {str(exc)}", traceback.format_exc()]
         )
 
 

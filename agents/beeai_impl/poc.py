@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from beeai_framework import BeeAgent, UnconstrainedMemory, Message, AssistantMessage, Role, Tool
 from beeai_framework.agents.bee.agent import BeeInput
 from beeai_framework.backend.chat import ChatModel, ChatModelInput, ChatModelOutput, ChatModelUsage, RunContext
-from beeai_framework.agents.types import BeeRunInput
+from beeai_framework.agents.types import BeeRunInput, AgentMeta
 
 from config.settings import Settings
 from core.logger import logger
@@ -91,10 +91,11 @@ class UniversityInfoSearchToolBee(Tool):
     )
     input_schema = SearchInputSchema
 
-    def _run(self, input: SearchInputSchema, options: Optional[dict] = None) -> str:
+    def _run(self, input: SearchInputSchema, options: Optional[dict] = None) -> "StringToolOutput":
+        from beeai_framework.tools.tool import StringToolOutput
         from tools.university_search_tool import _execute_university_search
         res = _execute_university_search(input.query)
-        return json.dumps(res, default=str)
+        return StringToolOutput(json.dumps(res, default=str))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +126,8 @@ async def run_beeai_poc_async(
         BeeInput(
             llm=chat_model,
             tools=[],
-            memory=UnconstrainedMemory()
+            memory=UnconstrainedMemory(),
+            meta=AgentMeta(name="Router", description="Router Agent", tools=[])
         )
     )
 
@@ -140,35 +142,31 @@ async def run_beeai_poc_async(
     category = router_res.result.text.strip().lower().strip("'\"")
 
     # ── Agent 2: Responder Agent ────────────────────────────────────────────
+    # Pre-fetch chunks so the agent has the official documents directly in context
+    from tools.university_search_tool import _execute_university_search
+    search_res = _execute_university_search(user_question)
+    chunks = search_res.get("answer_chunks", [])
+    sources = list(set(c.get("source_file") for c in chunks if c.get("source_file")))
+
     responder_agent = BeeAgent(
         BeeInput(
             llm=chat_model,
             tools=[search_tool],
-            memory=UnconstrainedMemory()
+            memory=UnconstrainedMemory(),
+            meta=AgentMeta(name="Responder", description="Responder Agent", tools=[search_tool])
         )
     )
 
     responder_prompt = (
         f"You are a university responder assistant. Answer the user question: {user_question}\n"
         f"Category of question: {category}\n"
-        f"You MUST use the UniversityInfoSearchTool to find facts from university files before answering."
+        f"Here are the official document chunks retrieved from the university files:\n"
+        f"{json.dumps(chunks, indent=2)}\n\n"
+        f"You MUST use the university document chunks above to answer the question. Do not make up facts."
     )
 
     responder_res = await responder_agent.run(BeeRunInput(prompt=responder_prompt))
     answer = responder_res.result.text
-
-    # Extract sources from the agent's run iterations (tool logs)
-    sources = []
-    for it in responder_res.iterations:
-        if it.state.tool_name == "UniversityInfoSearchTool" and it.state.tool_output:
-            try:
-                data = json.loads(it.state.tool_output)
-                for chunk in data.get("answer_chunks", []):
-                    src = chunk.get("source_file")
-                    if src and src not in sources:
-                        sources.append(src)
-            except Exception:
-                pass
 
     logger.info("[BeeAI] PoC finished. Category={}, Sources={}", category, sources)
 
@@ -188,13 +186,8 @@ def run_beeai_poc(
     Synchronous entry point for the BeeAI PoC workflow.
     """
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    try:
-        return loop.run_until_complete(
+        # Use asyncio.run for robust, thread-safe event loop execution
+        return asyncio.run(
             run_beeai_poc_async(user_question, settings, provider)
         )
     except Exception as exc:

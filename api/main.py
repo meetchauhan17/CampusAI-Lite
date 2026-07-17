@@ -200,9 +200,15 @@ def compare(req: CompareRequest):
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question must not be empty.")
     q = req.question.strip()
-    results = []
-    for pipeline in ["crewai", "langgraph", "autogen", "beeai"]:
-        results.append(_run_pipeline(pipeline, q))
+    
+    from concurrent.futures import ThreadPoolExecutor
+    pipelines = ["crewai", "langgraph", "autogen", "beeai"]
+    with ThreadPoolExecutor(max_workers=len(pipelines)) as executor:
+        # Submit tasks to executor to run concurrently
+        future_to_pipeline = {executor.submit(_run_pipeline, p, q): p for p in pipelines}
+        # Gather results in the correct order of the original pipelines list
+        results = [future.result() for future in future_to_pipeline]
+        
     return CompareResponse(question=q, results=results)
 
 

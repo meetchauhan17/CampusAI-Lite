@@ -78,9 +78,12 @@ def build_pydantic_ai_function_model(llm_provider: Any) -> FunctionModel:
             prompt=user_prompt,
             system=system_prompt,
         )
-        
+
+        # Safely strip — response.text can be None on safety-filtered responses
+        raw_text = response.text or ""
+        text = raw_text.strip()
+
         # Clean markdown code block wraps to prevent PydanticAI ValidationErrors
-        text = response.text.strip()
         if text.startswith("```"):
             lines = text.splitlines()
             if lines[0].startswith("```"):
@@ -89,7 +92,24 @@ def build_pydantic_ai_function_model(llm_provider: Any) -> FunctionModel:
                 lines = lines[:-1]
             text = "\n".join(lines).strip()
         text = text.strip("`").strip()
-        
+
+        # Guard: PydanticAI raises "model output must contain either output text
+        # or tool calls, these cannot both be empty" if TextPart.content is ""
+        # (happens on Gemini safety blocks, watsonx empty completions, or None)
+        if not text:
+            logger.warning(
+                "[ValidationAgent FunctionModel] LLM returned empty/None text via provider '{}'. "
+                "Injecting fallback JSON so PydanticAI does not crash.",
+                response.provider_used,
+            )
+            text = json.dumps({
+                "is_grounded": False,
+                "is_accurate": False,
+                "final_answer": "The LLM returned an empty response and could not validate the answer.",
+                "confidence": 0.0,
+                "issues": [f"LLM provider '{response.provider_used}' returned empty/None text (possible safety filter or quota issue)."]
+            })
+
         return ModelResponse(parts=[TextPart(content=text)])
 
     return FunctionModel(function=campus_llm_function, model_name="campus-llm-bridge")
@@ -100,16 +120,27 @@ def build_pydantic_ai_function_model(llm_provider: Any) -> FunctionModel:
 # ────────────────────────────────────────────────────────────────────────────
 
 VALIDATION_SYSTEM_PROMPT = """
-You are a strict university information validation assistant.
+You are a STRICT university information fact-checker.
 
-Your job:
-1. Read the user's original question, the raw answer provided by the Information Agent,
-   and the retrieved document chunks that should support that answer.
-2. Decide if the raw_answer is grounded in the retrieved chunks (no hallucinated facts).
-3. If you spot a factual error, correct it in `final_answer`.
-4. If the answer is unverifiable from the chunks, set is_grounded=False and is_accurate=False.
-5. Always produce a confidence score between 0.0 and 1.0.
-6. Always fill the `issues` list with specific problem descriptions (leave empty if there are none).
+Your ONLY information source is the numbered retrieved document chunks provided in the user message.
+You must NOT use any prior knowledge, assumptions, or external information.
+
+STEP-BY-STEP INSTRUCTIONS:
+1. Read the user's original question and the raw_answer from the Information Agent.
+2. Identify every concrete factual claim in raw_answer: dates, times, hall/block numbers, fees, amounts, deadlines, book limits, etc.
+3. For EACH claim, compare it to the retrieved chunks:
+   - Verify if the claim is factually supported by the chunks. (Phrasing can vary, e.g., "at 10:30 AM" is supported by "Time: 10:30 AM").
+   - If a claim is supported, DO NOT list it in the "issues" array.
+   - If a claim is incorrect, contradicts the chunks, or is missing from the chunks, list it as an issue in the "issues" array. Format the issue clearly, e.g., "Claim '<claim>' contradicts retrieved chunk..." or "Claim '<claim>' not found in chunks...".
+4. The "issues" array must ONLY contain actual errors, contradictions, or missing facts. It MUST be completely empty `[]` if all claims are correct. Never include positive notes like "Claim X is supported" in the "issues" array.
+5. Set is_grounded=True if all factual claims in raw_answer are supported by the chunks.
+6. Set is_accurate=True if and only if is_grounded is True AND there are no contradictions, unverified claims, or discrepancies. If there are any discrepancies, set is_accurate=False.
+7. If the raw_answer has no issues and is completely accurate, set is_accurate=True, is_grounded=True, and issues=[].
+8. Set confidence based on verification:
+   - All claims verified and accurate: 0.90 to 1.00
+   - Most claims verified and accurate (>=75%): 0.60 to 0.89
+   - Major contradictions or unverified claims: 0.00 to 0.59
+9. In final_answer: if the raw_answer is accurate, return it as-is. If there are errors or unverified claims, correct them using ONLY the facts from the chunks.
 
 You MUST respond with a JSON object matching this exact schema and nothing else:
 {
@@ -117,10 +148,11 @@ You MUST respond with a JSON object matching this exact schema and nothing else:
   "is_accurate": <bool>,
   "final_answer": "<string>",
   "confidence": <float between 0.0 and 1.0>,
-  "issues": ["<issue description>", ...]
+  "issues": ["<issue 1>", "<issue 2>", ...]
 }
 
 Do not include markdown code fences, prose, or any other text outside the JSON object.
+Do not invent facts. Do not trust the raw_answer without verifying against the chunks.
 """.strip()
 
 SCHEMA_REPAIR_PROMPT = """
@@ -164,16 +196,22 @@ class ValidationAgent:
         info_output: InformationAgentOutput,
         source_chunks: List[dict],
     ) -> str:
-        chunks_text = "\n---\n".join(
-            f"[Source: {c.get('source_file', 'unknown')} | Category: {c.get('category', 'n/a')}]\n{c.get('text', '')}"
-            for c in source_chunks
-        ) or "No source chunks were retrieved."
+        if source_chunks:
+            chunks_text = "\n\n".join(
+                f"[Chunk {i+1} | Source: {c.get('source_file', 'unknown')} | Category: {c.get('category', 'n/a')}]\n{c.get('text', '')}"
+                for i, c in enumerate(source_chunks)
+            )
+        else:
+            chunks_text = "No source chunks were retrieved."
 
         return (
             f"Original user question:\n{user_question}\n\n"
             f"Raw answer from Information Agent:\n{info_output.raw_answer}\n\n"
             f"Cited sources: {', '.join(info_output.sources) or 'none'}\n\n"
-            f"Retrieved document chunks:\n{chunks_text}"
+            f"Retrieved document chunks (your ONLY allowed information source):\n{chunks_text}\n\n"
+            f"TASK: Verify that every factual claim (dates, times, halls, amounts, limits) in the raw answer is factually supported by the numbered chunks above. "
+            f"Do NOT require identical phrasing (e.g., 'from 10:30 AM to 01:00 PM' is supported by 'Time: 10:30 AM to 01:00 PM', and 'in Block A, Hall 1-3' is supported by 'Venues: Block A, Hall 1-3'). "
+            f"Only flag an issue if the core fact is incorrect, contradicts the sources, or is completely missing from the chunks."
         )
 
     async def validate_async(
@@ -246,6 +284,15 @@ class ValidationAgent:
         source_chunks: Optional[List[dict]] = None,
     ) -> ValidationResult:
         """Synchronous wrapper around validate_async."""
-        return asyncio.get_event_loop().run_until_complete(
-            self.validate_async(user_question, info_output, source_chunks)
-        )
+        try:
+            return asyncio.run(
+                self.validate_async(user_question, info_output, source_chunks)
+            )
+        except RuntimeError as e:
+            if "already running" in str(e) or "cannot be called from a running event loop" in str(e):
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    return executor.submit(
+                        lambda: asyncio.run(self.validate_async(user_question, info_output, source_chunks))
+                    ).result()
+            raise

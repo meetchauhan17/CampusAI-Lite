@@ -20,10 +20,10 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "CampusAI Lite — Neural Campus",
-  description: "Agentic University Information Assistant built with CrewAI, LangGraph, AutoGen, and BeeAI.",
-};
+// export const metadata: Metadata = {
+//   title: "CampusAI Lite — Neural Campus",
+//   description: "Agentic University Information Assistant built with CrewAI, LangGraph, AutoGen, and BeeAI.",
+// };
 
 export default function RootLayout({
   children,

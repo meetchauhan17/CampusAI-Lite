@@ -140,7 +140,7 @@ def build_agents(provider: LLMProvider, verbose: bool = True) -> dict[str, Agent
     information = Agent(
         role="University Information Retriever",
         goal=(
-            "Use the UniversityInfoSearchTool to fetch relevant, grounded facts from "
+            "Use the university_info_search_tool to fetch relevant, grounded facts from "
             "university documents and draft a clear answer for the student. "
             "Output a JSON object with keys: raw_answer (str), sources (list[str]), "
             "category (str)."
@@ -148,7 +148,8 @@ def build_agents(provider: LLMProvider, verbose: bool = True) -> dict[str, Agent
         backstory=(
             "You are a university librarian AI with access to the official GTU document "
             "repository. You always cite the source files you used and never invent facts. "
-            "When the planner says requires_tool=True you MUST call the search tool."
+            "You MUST ALWAYS call the search tool to fetch current facts for any student query. "
+            "Do not skip calling the tool under any circumstances."
         ),
         tools=[search_tool],
         llm=llm,
@@ -167,8 +168,9 @@ def build_agents(provider: LLMProvider, verbose: bool = True) -> dict[str, Agent
         ),
         backstory=(
             "You are a meticulous fact-checker AI. You compare every claim in the drafted "
-            "answer against the source passages and flag any hallucination or inaccuracy. "
-            "You produce a structured ValidationResult that the UI layer can trust completely."
+            "answer against the raw_chunks retrieved by the Information Agent and flag "
+            "any hallucination or inaccuracy. You produce a structured ValidationResult "
+            "that the UI layer can trust completely."
         ),
         llm=llm,
         verbose=verbose,

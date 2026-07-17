@@ -113,7 +113,7 @@ try:
         passed directly to crewai.Agent(tools=[...]).
         Delegates to the same shared _execute_university_search logic.
         """
-        name: str = "UniversityInfoSearchTool"
+        name: str = "university_info_search_tool"
         description: str = (
             "Search university documents (exams, fees, library, hostel, academic calendar) "
             "to answer student queries. Input should be a specific search query string."
@@ -121,6 +121,11 @@ try:
 
         def _run(self, query: str) -> str:
             res = _execute_university_search(query)
+            # User request: Print the raw retrieved chunks inside the CrewAI tool call
+            print(f"\n[CrewAI Tool Call] Raw retrieved chunks for query '{query}':")
+            for i, chunk in enumerate(res.get("answer_chunks", [])):
+                print(f"  Chunk {i+1}: doc_id={chunk.get('doc_id')}, source={chunk.get('source_file')}, text={repr(chunk.get('text')[:120])}")
+            print("-" * 50 + "\n")
             return json.dumps(res, default=str)
 
 except ImportError:
