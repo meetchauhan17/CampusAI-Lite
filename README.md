@@ -1,5 +1,9 @@
 # CampusAI-Lite: Multi-Framework University Assistant
 
+<p align="center">
+  <img src="logo.png" alt="CampusAI Logo" width="180" />
+</p>
+
 [![Python Version](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
 [![Frameworks](https://img.shields.io/badge/Frameworks-CrewAI%20%7C%20LangGraph%20%7C%20AutoGen%20%7C%20BeeAI-orange.svg)](#)
 [![Backend](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Uvicorn-green.svg)](#)

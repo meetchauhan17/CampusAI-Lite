@@ -122,9 +122,7 @@ export default function Home() {
         {/* ── TOP HEADER ── */}
         <header className="flex justify-between items-center mb-12 md:mb-20 border-b border-white/5 pb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-neural-indigo to-neural-violet flex items-center justify-center font-display font-bold text-xl text-white shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-              C
-            </div>
+            <img src="/logo.png" alt="CampusAI Logo" className="w-10 h-10 rounded-xl object-cover shadow-[0_0_20px_rgba(99,102,241,0.3)]" />
             <div>
               <span className="font-display font-bold text-lg tracking-wide text-white">CAMPUS<span className="text-synapse-cyan">AI</span></span>
               <span className="text-[10px] block font-mono tracking-widest text-slate-400">LITE v1.0</span>
