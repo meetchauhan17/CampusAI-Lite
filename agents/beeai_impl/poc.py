@@ -125,8 +125,7 @@ async def run_beeai_poc_async(
         BeeInput(
             llm=chat_model,
             tools=[],
-            memory=UnconstrainedMemory(),
-            meta={"name": "RouterAgent"}
+            memory=UnconstrainedMemory()
         )
     )
 
@@ -145,8 +144,7 @@ async def run_beeai_poc_async(
         BeeInput(
             llm=chat_model,
             tools=[search_tool],
-            memory=UnconstrainedMemory(),
-            meta={"name": "ResponderAgent"}
+            memory=UnconstrainedMemory()
         )
     )
 

@@ -51,12 +51,18 @@ class CampusAIAutoGenClient(ModelClient):
                 message=SimpleNamespace(
                     content=None,
                     role="assistant",
-                    tool_calls=[tool_call]
+                    tool_calls=[tool_call],
+                    function_call=None
                 )
             )
             return SimpleNamespace(
                 choices=[choice],
-                model="campus-ai-provider"
+                model="campus-ai-provider",
+                usage=SimpleNamespace(
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0
+                )
             )
 
         # Otherwise, perform standard text generation
@@ -78,12 +84,19 @@ class CampusAIAutoGenClient(ModelClient):
         choice = SimpleNamespace(
             message=SimpleNamespace(
                 content=response.text,
-                role="assistant"
+                role="assistant",
+                tool_calls=None,
+                function_call=None
             )
         )
         return SimpleNamespace(
             choices=[choice],
-            model="campus-ai-provider"
+            model="campus-ai-provider",
+            usage=SimpleNamespace(
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=response.tokens_used
+            )
         )
 
     def message_retrieval(self, response: SimpleNamespace) -> List[str]:

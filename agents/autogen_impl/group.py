@@ -175,6 +175,10 @@ def run_autogen_pipeline(
 
     logger.info("[AutoGen] Starting pipeline for question: '{}'", user_question[:80])
 
+    # Globally register custom client class to avoid "not activated" errors
+    from autogen import OpenAIWrapper
+    OpenAIWrapper.register_model_client(CampusAIAutoGenClient)
+
     try:
         # Build agents
         agents = build_autogen_agents(provider, settings)

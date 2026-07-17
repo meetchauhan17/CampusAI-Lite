@@ -78,7 +78,19 @@ def build_pydantic_ai_function_model(llm_provider: Any) -> FunctionModel:
             prompt=user_prompt,
             system=system_prompt,
         )
-        return ModelResponse(parts=[TextPart(content=response.text)])
+        
+        # Clean markdown code block wraps to prevent PydanticAI ValidationErrors
+        text = response.text.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].endswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        text = text.strip("`").strip()
+        
+        return ModelResponse(parts=[TextPart(content=text)])
 
     return FunctionModel(function=campus_llm_function, model_name="campus-llm-bridge")
 
