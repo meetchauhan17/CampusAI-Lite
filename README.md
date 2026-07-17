@@ -1,4 +1,4 @@
-# 🎓 CampusAI-Lite: Multi-Framework University Assistant
+# CampusAI-Lite: Multi-Framework University Assistant
 
 [![Python Version](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
 [![Frameworks](https://img.shields.io/badge/Frameworks-CrewAI%20%7C%20LangGraph%20%7C%20AutoGen%20%7C%20BeeAI-orange.svg)](#)
@@ -11,7 +11,7 @@ It answers complex university inquiries (fees, hostel rules, exam timetables, et
 
 ---
 
-## 🏗️ Core Architecture & Data Flow
+## Core Architecture & Data Flow
 
 CampusAI-Lite is structured around a decoupled agent-and-server architecture:
 
@@ -57,7 +57,7 @@ The `/api/compare` endpoint executes all 4 framework pipelines concurrently usin
 
 ---
 
-## 📁 Folder Structure
+## Folder Structure
 
 ```
 campusai-lite/
@@ -65,7 +65,6 @@ campusai-lite/
 ├── .gitignore               # Excludes virtual environments, .env, and logs
 ├── requirements.txt         # Pinned Python package dependencies
 ├── README.md                # This setup and architecture guide
-├── test_bob_api.py          # (Temporary/Removed) Bob integration script
 ├── config/
 │   └── settings.py          # Config loader and validator via Pydantic
 ├── core/
@@ -79,7 +78,7 @@ campusai-lite/
 │   └── university_docs/     # Academic guidelines, fee schedules, timetables
 ├── agents/
 │   ├── crewai_impl/         # CrewAI Sequential Workflow (Planner -> Info -> Validator)
-│   ├── langgraph_impl/      # LangGraph cyclical statechart implementation
+│   ├── langgraph_impl/      # LangGraph statechart implementation
 │   ├── autogen_impl/        # AutoGen group chat agent implementation
 │   └── beeai_impl/          # BeeAI PoC framework implementation
 ├── ui/
@@ -92,7 +91,7 @@ campusai-lite/
 
 ---
 
-## 🛠️ Setup & Installation
+## Setup & Installation
 
 ### Prerequisite
 Python **3.11** must be installed on your system.
@@ -127,7 +126,7 @@ GEMINI_API_KEY=your_gemini_key
 
 ---
 
-## 🚀 Running the Services
+## Running the Services
 
 Always ensure your virtual environment is active (`.venv\Scripts\Activate.ps1`) before executing.
 
@@ -162,7 +161,7 @@ python ui/gradio_app.py
 
 ---
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
 Run the full suite of unit tests to verify the tool classifications, LLM provider, and PydanticAI validation routines:
 
