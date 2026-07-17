@@ -57,7 +57,8 @@ The `/api/compare` endpoint executes all 4 framework pipelines concurrently usin
 
 ---
 
-## Folder Structure
+<details>
+<summary>📂 <b>View Folder Structure</b></summary>
 
 ```
 campusai-lite/
@@ -89,11 +90,12 @@ campusai-lite/
 └── tests/                   # Test suite (LLM, vector search, validation)
 ```
 
+</details>
+
 ---
 
-## Framework Implementation Details
-
-Each agent framework is wired to perform the exact same three logical steps, allowing for a standardized comparison:
+<details>
+<summary>🤖 <b>View Framework Implementation Details</b></summary>
 
 ### 1. CrewAI
 * **Agents**: Defines three specialized roles:
@@ -116,6 +118,8 @@ Each agent framework is wired to perform the exact same three logical steps, all
 
 ### 4. BeeAI (PoC)
 * **Orchestration**: Operates as a light conceptual prototype that sets up a single-agent router to fetch details and validate them directly.
+
+</details>
 
 ---
 
@@ -190,7 +194,8 @@ python ui/gradio_app.py
 
 ---
 
-## Troubleshooting & Known Issues
+<details>
+<summary>🔧 <b>View Troubleshooting & Known Issues Guide</b></summary>
 
 ### 1. Address Already in Use (Port Conflicts)
 If starting the FastAPI or Gradio servers results in `[Errno 10048] (Address already in use)`, run these PowerShell commands to kill the background processes occupying the ports:
@@ -208,6 +213,8 @@ When executing multiple frameworks concurrently, parallel CLI processes may try 
 ### 3. Windows Emoji Encoding Crashes
 If printing unicode characters or emojis (`✨`, `📋`) raises a `UnicodeEncodeError` in Windows PowerShell/Command Prompt:
 * **Resolution**: Already solved in `logger.py` by reconfiguring `sys.stdout` and `sys.stderr` to use `utf-8` mode on Windows launch.
+
+</details>
 
 ---
 
