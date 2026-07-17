@@ -75,3 +75,25 @@ Based on the actual implementation of the three-role sequential workflow (Planne
 - **CrewAI** is a more natural fit for strict sequential pipelines. Its native Task chaining abstraction makes it easy to write clean, predictable workflows.
 - **AG2 (AutoGen)** is designed for open-ended conversational problem solving. Forcing it into a strict pipeline requires writing custom transition functions and registering custom replies, making it feel less suited for rigid processes but highly powerful for interactive feedback loops.
 
+---
+
+## 5. BeeAI vs CrewAI/AutoGen Comparison
+
+Implementing the two-agent PoC in BeeAI (`RouterAgent` → `ResponderAgent`) highlighted several key comparisons in boilerplate, developer experience, and runtime integration:
+
+### Boilerplate Comparison
+- **BeeAI**: Required significant boilerplate for pluggable LLMs and custom tools. We had to subclass `ChatModel` and implement three separate abstract methods: `_create()`, `_create_stream()`, and `_create_structure()`, as well as subclass `Tool` and define pydantic schemas. 
+- **CrewAI**: Minimal boilerplate for high-level declarations but required subclassing `BaseLLM` for custom provider integration.
+- **AutoGen**: High boilerplate for custom `ModelClient` protocols, but extremely simple for tool-calling via function parameters and automatic schema extraction.
+
+### Developer Experience
+- **Docs & Errors**: BeeAI's Python framework has a steeper developer experience. Its error outputs (e.g. `Can't instantiate abstract class ... with abstract method _create_structure`) can be tricky to diagnose due to strict Pydantic `InstanceOf` type enforcement. Its documentation is primarily JS/TS-oriented, with fewer detailed Python examples.
+- **Adding Custom Tools**: Adding custom tools is strictly schema-bound. We had to instantiate subclassed `Tool` structures with distinct Pydantic models. It is more structured than CrewAI but requires more lines of code.
+
+---
+
+## 6. Production Recommendation
+
+For a production deployment of **CampusAI Lite**, **LangGraph** is the recommended framework. While CrewAI and AutoGen offer high-level collaborative abstractions, they lack the deterministic control over cyclic routing and self-correction loops necessary for production-grade Retrieval-Augmented Generation (RAG). LangGraph's explicit state graph structure guarantees that we can enforce validation rules, log precise transitions, control retries, and recover from validation failures deterministically. LangGraph provides the perfect balance of flexibility, robust state management, and debugging clarity needed to serve GTU student queries reliably at scale.
+
+
