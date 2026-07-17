@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-void: #030304;
+  --color-surface: #0F1115;
+  --color-neural-indigo: #6366F1;
+  --color-neural-violet: #8B5CF6;
+  --color-synapse-cyan: #22D3EE;
+}
+
+:root {
+  --background: #030304;
+  --foreground: #ededed;
+}
+
+body {
+  background-color: #030304;
+  color: #ededed;
+  font-family: var(--font-sans);
+}
+
+/* ── Technical Grid Texture ── */
+.grid-bg {
+  background-image: 
+    linear-gradient(rgba(99, 102, 241, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: center;
+}
+
+/* ── Animations ── */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-reverse-slow {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes pulse-cyan {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(34, 211, 238, 0.4);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 5px rgba(34, 211, 238, 0.1);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 25s linear infinite;
+}
+
+.animate-spin-reverse-slow {
+  animation: spin-reverse-slow 30s linear infinite;
+}
+
+.animate-pulse-cyan {
+  animation: pulse-cyan 2.5s ease-in-out infinite;
+}
+
+/* ── Accessibility: Respect prefers-reduced-motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-spin-slow,
+  .animate-spin-reverse-slow,
+  .animate-pulse-cyan {
+    animation: none !important;
+    transform: none !important;
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.2) !important;
+  }
+}
